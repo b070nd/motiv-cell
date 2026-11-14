@@ -1,12 +1,12 @@
 # motiv-cell
 
-An air-gapped, deterministic network of cells, written in Go, for detecting timelines, narrative, actors and their motivations in text. The first target is stock-exchange news; the same core is meant to serve storyline detection in literature (novels, fiction, essays, news reports).
+A deterministic network of cells, written in Go, for detecting timelines, narrative, actors and their motivations in text. The first target is stock-exchange news; the same core is meant to serve storyline detection in literature (novels, fiction, essays, news reports).
 
 **Status:** the generic core is implemented and tested (`cell`, `lattice`, `engine`, `clock`, `canon`, `guard`). Domain packages (actors, voids, evidence, news ingestion and the rest) are still empty stubs.
 
 ## Principles
 
-- **Air-gapped:** no network access at build or run time; data enters only as files from `data/`.
+- **Network-free core:** the core packages never touch the network. Model providers such as a local laya server live in separate, explicitly listed packages and can either be called during a run or write annotation files the core reads.
 - **Deterministic:** the same input and config give byte-identical output. Fixed-point integers in the cell rule, no randomness in the core, no wall clock, canonical JSONL output.
 - **No global state:** no `init()` and no package-level mutable state; modules are built from explicit config and injected dependencies.
 - **Generic core:** a cell is a pure `(state, inputs) -> state` function; topology (graph, lattice, layered) and tick source are pluggable. The Motivation Cell (owner, void, evidence, peak) is one domain plug-in.
