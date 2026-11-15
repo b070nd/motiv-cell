@@ -59,6 +59,14 @@ func projectAllowed() map[string][]string {
 	}
 }
 
+func versionStamp(pkg string, d *ast.GenDecl) bool {
+	if !isCmdPkg(pkg) || len(d.Specs) != 1 {
+		return false
+	}
+	spec, ok := d.Specs[0].(*ast.ValueSpec)
+	return ok && len(spec.Names) == 1 && spec.Names[0].Name == "version"
+}
+
 func isCmdPkg(pkg string) bool {
 	return pkg == "cmd/motivation"
 }
@@ -149,7 +157,7 @@ func checkFile(f *ast.File, fset *token.FileSet, pkg string) []string {
 				out = append(out, violation(fset, d.Pos(), "R2", "func init is forbidden"))
 			}
 		case *ast.GenDecl:
-			if d.Tok == token.VAR {
+			if d.Tok == token.VAR && !versionStamp(pkg, d) {
 				out = append(out, violation(fset, d.Pos(), "R3", "package-level var is forbidden"))
 			}
 		}
@@ -287,6 +295,8 @@ func TestGuardDetects(t *testing.T) {
 		{"R2", "R2", "model", "package p\nfunc init() {}\n"},
 		{"R3", "R3", "model", "package p\nvar x = 1\n"},
 		{"R3 grouped", "R3", "model", "package p\nvar (\n\ta = 1\n)\n"},
+		{"R3 version outside cmd", "R3", "model", "package p\nvar version = \"dev\"\n"},
+		{"R3 other var in cmd", "R3", "cmd/motivation", "package p\nvar other = 1\n"},
 		{"R4", "R4", "model", "package p\nimport \"time\"\nfunc f() { _ = time.Now() }\n"},
 		{"R4 renamed", "R4", "model", "package p\nimport t \"time\"\nfunc f() { t.Sleep(1) }\n"},
 		{"R5 float", "R5", "cell", "package p\nfunc f() float64 { return 0 }\n"},

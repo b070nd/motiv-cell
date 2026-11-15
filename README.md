@@ -45,6 +45,14 @@ Requires Go 1.27.1.
 cd app && go build ./... && go vet ./... && go test ./...
 ```
 
+Build the executable:
+
+```bash
+./build.sh
+```
+
+This compiles every package and writes `bin/motivation`, stamped with `dev-<commit>` (plus `-dirty` if there are uncommitted changes); `bin/motivation version` prints it. `./build.sh tag` builds the tag on HEAD into `dist/` and refuses a dirty tree; `./build.sh tag v1.0.0` builds a named tag.
+
 ## Run
 
 Start a local laya server bound to localhost (it binds to all interfaces by default):

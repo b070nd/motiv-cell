@@ -21,10 +21,12 @@ type Error string
 func (e Error) Error() string { return string(e) }
 
 const (
-	errUsage    Error = "usage: motivation run|compare [flags]"
+	errUsage    Error = "usage: motivation run|compare|version [flags]"
 	errProvider Error = "run: give exactly one of -laya or -answers"
 	errRecord   Error = "run: -record needs -laya"
 )
+
+var version = "dev"
 
 func main() {
 	if err := dispatch(os.Args[1:], os.Stdout); err != nil {
@@ -42,6 +44,9 @@ func dispatch(args []string, stdout io.Writer) error {
 		return run(args[1:], stdout)
 	case "compare":
 		return compare(args[1:], stdout)
+	case "version":
+		_, err := fmt.Fprintln(stdout, version)
+		return err
 	}
 	return errUsage
 }
