@@ -24,7 +24,7 @@ func universalStd() []string {
 func extraStd(pkg string) []string {
 	switch pkg {
 	case "cmd/motivation", "cmd/motivation-tui":
-		return []string{"os", "flag"}
+		return []string{"os", "flag", "encoding/json"}
 	case "store", "ingest", "golden":
 		return []string{"os", "io/fs", "path/filepath"}
 	case "newsfeed":

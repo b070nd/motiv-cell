@@ -1,0 +1,24 @@
+{
+  "model": "english",
+  "none": "none",
+  "pursuit_min": 500,
+  "questions": [
+    {
+      "name": "void",
+      "kind": "choice",
+      "text": "What does the main actor in this sentence lack or want?",
+      "options": ["capital", "regulatory approval", "market share", "liquidity", "reputation", "control", "none"]
+    },
+    {
+      "name": "pursuit",
+      "kind": "yesno",
+      "text": "Is a company or person trying to obtain something?"
+    },
+    {
+      "name": "intensity",
+      "kind": "score",
+      "text": "How forcefully is the goal pursued in this sentence?",
+      "options": ["not at all", "weakly", "moderately", "strongly", "desperately"]
+    }
+  ]
+}

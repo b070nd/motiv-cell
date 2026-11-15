@@ -2,7 +2,7 @@
 
 A deterministic network of cells, written in Go, for detecting timelines, narrative, actors and their motivations in text. The first target is stock-exchange news; the same core is meant to serve storyline detection in literature (novels, fiction, essays, news reports).
 
-**Status:** the generic core, the Motivation Cell rule, the news reader and the laya provider are implemented and tested. There is no command-line program yet, and the remaining domain packages (actors, voids, evidence, segmentation and the rest) are empty stubs.
+**Status:** the generic core, the Motivation Cell rule, the news reader and the laya provider are implemented and tested. The `motivation` command runs the whole chain. Owners are not detected yet, and the remaining domain packages (actors, voids, evidence and the rest) are empty stubs.
 
 ## Principles
 
@@ -23,6 +23,7 @@ app/
     cell/ lattice/ engine/            cell rule, topologies, stepper
     clock/ config/                    injected time, typed config
     canon/                            canonical JSONL writer
+    segment/                          rule-based sentence splitter
     motive/                           Motivation Cell rule and peak field
     laya/                             client for a local laya-serve (network)
     guard/                            structural rules enforced as a test
@@ -46,6 +47,36 @@ Requires Go 1.27.1.
 ```bash
 cd app && go build ./... && go vet ./... && go test ./...
 ```
+
+## Run
+
+Start a local laya server bound to localhost (it binds to all interfaces by default):
+
+```bash
+LAYA_HOST=127.0.0.1 LAYA_PORT=8765 LAYA_MODELS=english laya-serve
+```
+
+Live run, recording laya's answers:
+
+```bash
+cd app && go run ./src/cmd/motivation run -news ../data/news/sample.jsonl -questions config/questions.json -laya http://127.0.0.1:8765 -record ../data/annotations/live.jsonl -out ../data/runs/live.jsonl
+```
+
+Replay from the recorded answers, without laya:
+
+```bash
+cd app && go run ./src/cmd/motivation run -news ../data/news/sample.jsonl -questions config/questions.json -answers ../data/annotations/live.jsonl -out ../data/runs/replay.jsonl
+```
+
+Compare two answer files:
+
+```bash
+cd app && go run ./src/cmd/motivation compare -a ../data/annotations/live.jsonl -b ../data/annotations/other.jsonl
+```
+
+How a run works: documents are ordered by timestamp, the headline is sentence 0 and the body is split into sentences. Each sentence is put to the questions in `config/questions.json`, which must be named `void` (choice), `intensity` (score) and optionally `pursuit` (yes/no). A sentence becomes evidence when its void is not the `none` label and its yes-probability for `pursuit` is at least `pursuit_min` (per-mille). The first evidence for a void in a document creates a cell; cells in different documents with the same void are linked. The result is JSONL with one `run` line, then `cell`, `evidence` and `link` lines.
+
+The answers depend on the laya checkpoint and on the exact question wording, and are uncalibrated. Set `LAYA_API_KEY` if the server requires a key.
 
 ## Core
 
