@@ -58,7 +58,7 @@ func TestRule110(t *testing.T) {
 	}
 	want := []string{"00000011", "00000111", "00001101", "00011111", "00110001", "01110011", "11010111"}
 	for i, w := range want {
-		if err := e.Step(Batch[struct{}]{}); err != nil {
+		if err := e.Step(Batch[uint8, struct{}]{}); err != nil {
 			t.Fatal(err)
 		}
 		if got := row(t, e); got != w {
@@ -91,7 +91,7 @@ func TestSchedules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := e.Step(Batch[int64]{}); err != nil {
+		if err := e.Step(Batch[int64, int64]{}); err != nil {
 			t.Fatal(err)
 		}
 		if got := e.States(nil); !slices.Equal(got, tc.want) {
@@ -107,7 +107,7 @@ func TestFeeds(t *testing.T) {
 		{At: 30, To: 0, Event: 7},
 		{At: 10, To: 0, Event: 2},
 	}
-	record := func(source Source[int64]) ([]int64, [][]int64) {
+	record := func(source Source[int64, int64]) ([]int64, [][]int64) {
 		graph, err := lattice.NewGraph(2, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -136,7 +136,7 @@ func TestFeeds(t *testing.T) {
 		return ats, seen
 	}
 
-	ats, seen := record(NewTimestamps(items))
+	ats, seen := record(NewTimestamps[int64](items, nil))
 	if !slices.Equal(ats, []int64{10, 30}) {
 		t.Fatalf("timestamps: ticks at %v", ats)
 	}
@@ -145,7 +145,7 @@ func TestFeeds(t *testing.T) {
 	}
 
 	positions := []Item[int64]{{At: 2, To: 0, Event: 9}, {At: 0, To: 0, Event: 4}}
-	feed, err := NewDiscourse(positions, 4)
+	feed, err := NewDiscourse[int64](positions, nil, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestFeeds(t *testing.T) {
 	if !slices.Equal(seen[0], []int64{4}) || len(seen[1]) != 0 || !slices.Equal(seen[2], []int64{9}) || len(seen[3]) != 0 {
 		t.Fatalf("discourse: events %v", seen)
 	}
-	if _, err := NewDiscourse(positions, 2); !errors.Is(err, ErrPosition) {
+	if _, err := NewDiscourse[int64](positions, nil, 2); !errors.Is(err, ErrPosition) {
 		t.Fatalf("discourse bounds: got %v", err)
 	}
 }
@@ -184,7 +184,7 @@ func TestStepIsAtomic(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = e.Step(Batch[int64]{})
+		err = e.Step(Batch[int64, int64]{})
 		var stepErr *StepError
 		if !errors.As(err, &stepErr) || stepErr.Cell != 2 || !errors.Is(err, errBoom) {
 			t.Fatalf("schedule %d: got %v", schedule, err)
@@ -193,14 +193,68 @@ func TestStepIsAtomic(t *testing.T) {
 			t.Fatalf("schedule %d: state changed after failure: %v ticks %d", schedule, got, e.Ticks())
 		}
 		fail = false
-		if err := e.Step(Batch[int64]{}); err != nil {
+		if err := e.Step(Batch[int64, int64]{}); err != nil {
 			t.Fatal(err)
 		}
 		if got := e.States(nil); !slices.Equal(got, []int64{1, 1, 1}) {
 			t.Fatalf("schedule %d: got %v", schedule, got)
 		}
-		if err := e.Step(Batch[int64]{Deliveries: []Delivery[int64]{{To: 3}}}); !errors.Is(err, ErrDelivery) {
+		if err := e.Step(Batch[int64, int64]{Deliveries: []Delivery[int64]{{To: 3}}}); !errors.Is(err, ErrDelivery) {
 			t.Fatalf("schedule %d: delivery bounds: got %v", schedule, err)
 		}
+	}
+}
+
+func TestGrowth(t *testing.T) {
+	graph, err := lattice.NewGraph(1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail := false
+	rule := func(ctx cell.Context, self int64, neighbors []cell.Neighbor[int64], events []int64) (int64, error) {
+		if fail {
+			return 0, errBoom
+		}
+		return sum(ctx, self, neighbors, events)
+	}
+	e, err := New(Config[int64, int64]{
+		Topology: graph,
+		Rule:     cell.RuleFunc[int64, int64](rule),
+		Schedule: Synchronous,
+		Initial:  []int64{1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grow := Batch[int64, int64]{
+		Add:        []int64{10},
+		Link:       []lattice.Edge{{From: 0, To: 1}, {From: 1, To: 0}},
+		Deliveries: []Delivery[int64]{{To: 1, Event: 100}},
+	}
+	fail = true
+	if err := e.Step(grow); !errors.Is(err, errBoom) {
+		t.Fatalf("got %v", err)
+	}
+	if e.Size() != 1 || e.Ticks() != 0 {
+		t.Fatalf("growth not rolled back: size %d", e.Size())
+	}
+	fail = false
+	if err := e.Step(grow); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.States(nil); !slices.Equal(got, []int64{11, 111}) {
+		t.Fatalf("got %v", got)
+	}
+	if err := e.Step(Batch[int64, int64]{Link: []lattice.Edge{{From: 0, To: 1}}}); !errors.Is(err, ErrRepeat) {
+		t.Fatalf("got %v", err)
+	}
+	if err := e.Step(Batch[int64, int64]{Link: []lattice.Edge{{From: 0, To: 2}}}); !errors.Is(err, ErrLink) {
+		t.Fatalf("got %v", err)
+	}
+	if err := e.Step(Batch[int64, int64]{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.States(nil); !slices.Equal(got, []int64{122, 122}) {
+		t.Fatalf("got %v", got)
 	}
 }

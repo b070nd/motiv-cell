@@ -27,6 +27,12 @@ func extraStd(pkg string) []string {
 		return []string{"os", "flag"}
 	case "store", "ingest", "golden":
 		return []string{"os", "io/fs", "path/filepath"}
+	case "newsfeed":
+		return []string{"encoding/json", "time"}
+	case "annotate":
+		return []string{"encoding/json"}
+	case "laya":
+		return []string{"context", "encoding/json", "net/http", "net/url"}
 	}
 	return nil
 }
@@ -44,6 +50,8 @@ func projectAllowed() map[string][]string {
 		"engine":    {"cell", "lattice", "clock"},
 		"ingest":    {"model"},
 		"newsfeed":  {"model", "ingest"},
+		"motive":    {"model", "cell"},
+		"laya":      {"annotate"},
 		"market":    {"model"},
 		"segment":   {"model"},
 		"lexicon":   {"model", "config"},
@@ -53,7 +61,7 @@ func projectAllowed() map[string][]string {
 		"peak":      {"model"},
 		"timeline":  {"model"},
 		"narrative": {"model", "actors", "voids", "evidence", "peak", "timeline"},
-		"annotate":  {"model"},
+		"annotate":  {"model", "canon"},
 		"agreement": {"annotate"},
 		"store":     {"model", "canon"},
 		"report":    {"model", "narrative", "agreement", "canon"},

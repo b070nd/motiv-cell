@@ -24,6 +24,8 @@ const (
 	ErrSource   Error = "engine: source is nil"
 	ErrLength   Error = "engine: discourse length out of range"
 	ErrPosition Error = "engine: item position outside discourse"
+	ErrLink     Error = "engine: link endpoint out of range"
+	ErrRepeat   Error = "engine: link already exists"
 )
 
 type Schedule uint8
@@ -38,13 +40,15 @@ type Delivery[E any] struct {
 	Event E
 }
 
-type Batch[E any] struct {
+type Batch[S, E any] struct {
 	At         int64
+	Add        []S
+	Link       []lattice.Edge
 	Deliveries []Delivery[E]
 }
 
-type Source[E any] interface {
-	Next() (Batch[E], bool, error)
+type Source[S, E any] interface {
+	Next() (Batch[S, E], bool, error)
 }
 
 type Config[S, E any] struct {
@@ -72,11 +76,16 @@ type inbound struct {
 	link cell.Link
 }
 
+type mark struct {
+	at     int
+	length int
+}
+
 type Engine[S, E any] struct {
 	rule      cell.Rule[S, E]
 	schedule  Schedule
-	offsets   []int
-	inbound   []inbound
+	inbound   [][]inbound
+	marks     []mark
 	current   []S
 	pending   []S
 	neighbors []cell.Neighbor[S]
@@ -102,10 +111,8 @@ func New[S, E any](config Config[S, E]) (*Engine[S, E], error) {
 	if len(config.Initial) != size {
 		return nil, ErrInitial
 	}
-	offsets := make([]int, size+1)
-	var edges []inbound
+	edges := make([][]inbound, size)
 	var buf []lattice.Edge
-	degree := 0
 	for at := 0; at < size; at++ {
 		to := cell.ID(at)
 		buf = config.Topology.Inbound(to, buf[:0])
@@ -113,22 +120,18 @@ func New[S, E any](config Config[S, E]) (*Engine[S, E], error) {
 			if edge.To != to || uint64(edge.From) >= uint64(size) {
 				return nil, ErrEdge
 			}
-			edges = append(edges, inbound{from: edge.From, link: edge.Link})
+			edges[at] = append(edges[at], inbound{from: edge.From, link: edge.Link})
 		}
-		offsets[at+1] = len(edges)
-		degree = max(degree, len(buf))
 	}
 	current := make([]S, size)
 	copy(current, config.Initial)
 	return &Engine[S, E]{
-		rule:      config.Rule,
-		schedule:  config.Schedule,
-		offsets:   offsets,
-		inbound:   edges,
-		current:   current,
-		pending:   make([]S, size),
-		neighbors: make([]cell.Neighbor[S], 0, degree),
-		bounds:    make([]int, size),
+		rule:     config.Rule,
+		schedule: config.Schedule,
+		inbound:  edges,
+		current:  current,
+		pending:  make([]S, size),
+		bounds:   make([]int, size),
 	}, nil
 }
 
@@ -148,12 +151,25 @@ func (e *Engine[S, E]) States(buf []S) []S {
 	return append(buf, e.current...)
 }
 
-func (e *Engine[S, E]) Step(batch Batch[E]) error {
-	size := len(e.current)
+func (e *Engine[S, E]) Step(batch Batch[S, E]) error {
+	before := len(e.current)
+	if len(batch.Add) > lattice.MaxSize-before {
+		return ErrSize
+	}
+	size := before + len(batch.Add)
 	for _, delivery := range batch.Deliveries {
 		if uint64(delivery.To) >= uint64(size) {
 			return ErrDelivery
 		}
+	}
+	for _, edge := range batch.Link {
+		if uint64(edge.From) >= uint64(size) || uint64(edge.To) >= uint64(size) {
+			return ErrLink
+		}
+	}
+	if err := e.grow(batch.Add, batch.Link); err != nil {
+		e.shrink(before)
+		return err
 	}
 	events := e.distribute(batch.Deliveries)
 	tick := cell.Tick{Index: e.ticks, At: batch.At}
@@ -166,7 +182,7 @@ func (e *Engine[S, E]) Step(batch Batch[E]) error {
 	begin := 0
 	for at := 0; at < size; at++ {
 		neighbors := e.neighbors[:0]
-		for _, in := range e.inbound[e.offsets[at]:e.offsets[at+1]] {
+		for _, in := range e.inbound[at] {
 			neighbors = append(neighbors, cell.Neighbor[S]{ID: in.from, Link: in.link, State: source[in.from]})
 		}
 		end := e.bounds[at]
@@ -178,18 +194,21 @@ func (e *Engine[S, E]) Step(batch Batch[E]) error {
 		}
 		e.pending[at] = next
 		begin = end
+		e.neighbors = neighbors
 	}
 	clear(events)
 	clear(e.neighbors[:cap(e.neighbors)])
 	if failure != nil {
+		e.shrink(before)
 		return failure
 	}
+	e.marks = e.marks[:0]
 	e.current, e.pending = e.pending, e.current
 	e.ticks++
 	return nil
 }
 
-func (e *Engine[S, E]) Run(source Source[E]) error {
+func (e *Engine[S, E]) Run(source Source[S, E]) error {
 	if source == nil {
 		return ErrSource
 	}
@@ -223,4 +242,37 @@ func (e *Engine[S, E]) distribute(deliveries []Delivery[E]) []E {
 		e.bounds[delivery.To]++
 	}
 	return e.events
+}
+
+func (e *Engine[S, E]) grow(add []S, link []lattice.Edge) error {
+	e.marks = e.marks[:0]
+	size := len(e.current) + len(add)
+	e.current = append(e.current, add...)
+	e.pending = slices.Grow(e.pending, len(add))[:size]
+	e.bounds = slices.Grow(e.bounds, len(add))[:size]
+	e.inbound = slices.Grow(e.inbound, len(add))[:size]
+	for _, edge := range link {
+		entry := inbound{from: edge.From, link: edge.Link}
+		if slices.Contains(e.inbound[edge.To], entry) {
+			return ErrRepeat
+		}
+		e.marks = append(e.marks, mark{at: int(edge.To), length: len(e.inbound[edge.To])})
+		e.inbound[edge.To] = append(e.inbound[edge.To], entry)
+	}
+	return nil
+}
+
+func (e *Engine[S, E]) shrink(size int) {
+	for i := len(e.marks) - 1; i >= 0; i-- {
+		m := e.marks[i]
+		e.inbound[m.at] = e.inbound[m.at][:m.length]
+	}
+	e.marks = e.marks[:0]
+	clear(e.current[size:])
+	clear(e.pending[size:])
+	clear(e.inbound[size:])
+	e.current = e.current[:size]
+	e.pending = e.pending[:size]
+	e.bounds = e.bounds[:size]
+	e.inbound = e.inbound[:size]
 }
