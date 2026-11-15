@@ -33,18 +33,18 @@ func TestRoundTrip(t *testing.T) {
 
 func TestWriteBytes(t *testing.T) {
 	var buf bytes.Buffer
-	err := Write(&buf, []Answer{{Doc: "d1", Sentence: 3, Question: "q", Label: "yes", Score: 730}})
+	err := Write(&buf, []Answer{{Doc: "d1", Sentence: 3, Mark: "ab", Question: "q", Label: "yes", Score: 730}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"doc":"d1","label":"yes","question":"q","score":730,"sentence":3}` + "\n"
+	want := `{"doc":"d1","label":"yes","mark":"ab","question":"q","score":730,"sentence":3}` + "\n"
 	if buf.String() != want {
 		t.Fatalf("got %q want %q", buf.String(), want)
 	}
 }
 
 func TestReadErrors(t *testing.T) {
-	in := "\n" + `{"doc":"a","label":"","question":"q","score":1,"sentence":1}` + "\n\n" + "nope\n"
+	in := "\n" + `{"doc":"a","label":"","mark":"","question":"q","score":1,"sentence":1}` + "\n\n" + "nope\n"
 	_, err := Read(strings.NewReader(in))
 	if err == nil || !strings.Contains(err.Error(), "line 4") {
 		t.Fatalf("got %v", err)
@@ -133,5 +133,26 @@ func TestCompare(t *testing.T) {
 	}
 	if !reflect.DeepEqual(a, ac) || !reflect.DeepEqual(b, bc) {
 		t.Fatal("inputs mutated")
+	}
+}
+
+func TestFileFollowsTextAndDetectsDrift(t *testing.T) {
+	f := NewFile([]Answer{
+		{Doc: "a", Sentence: 0, Mark: "x", Question: "q", Score: 1},
+		{Doc: "a", Sentence: 1, Mark: "y", Question: "q", Score: 2},
+		{Doc: "a", Sentence: 2, Mark: "x", Question: "q", Score: 3},
+	})
+	got, err := f.Answers([]Request{{Doc: "a", Sentence: 0, Mark: "y"}, {Doc: "a", Sentence: 1, Mark: "x"}, {Doc: "a", Sentence: 2, Mark: "x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Score != 2 || got[0].Sentence != 0 || got[1].Score != 1 || got[1].Sentence != 1 || got[2].Score != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 0, Mark: "new"}}); err != ErrDrift {
+		t.Fatalf("got %v", err)
+	}
+	if got, err := f.Answers([]Request{{Doc: "unrecorded", Sentence: 0, Mark: "z"}}); err != nil || len(got) != 0 {
+		t.Fatalf("got %v %v", got, err)
 	}
 }

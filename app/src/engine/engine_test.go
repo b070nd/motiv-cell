@@ -48,7 +48,7 @@ func TestRule110(t *testing.T) {
 		t.Fatal(err)
 	}
 	e, err := New(Config[uint8, struct{}]{
-		Topology: line,
+		Links:    lattice.Edges(line),
 		Rule:     cell.RuleFunc[uint8, struct{}](rule110),
 		Schedule: Synchronous,
 		Initial:  []uint8{0, 0, 0, 0, 0, 0, 0, 1},
@@ -83,7 +83,7 @@ func TestSchedules(t *testing.T) {
 		{Sequential, []int64{1, 1, 1}},
 	} {
 		e, err := New(Config[int64, int64]{
-			Topology: graph,
+			Links:    lattice.Edges(graph),
 			Rule:     cell.RuleFunc[int64, int64](sum),
 			Schedule: tc.schedule,
 			Initial:  []int64{1, 0, 0},
@@ -122,7 +122,7 @@ func TestFeeds(t *testing.T) {
 			return self, nil
 		}
 		e, err := New(Config[int64, int64]{
-			Topology: graph,
+			Links:    lattice.Edges(graph),
 			Rule:     cell.RuleFunc[int64, int64](rule),
 			Schedule: Synchronous,
 			Initial:  []int64{0, 0},
@@ -176,7 +176,7 @@ func TestStepIsAtomic(t *testing.T) {
 	for _, schedule := range []Schedule{Synchronous, Sequential} {
 		fail = true
 		e, err := New(Config[int64, int64]{
-			Topology: graph,
+			Links:    lattice.Edges(graph),
 			Rule:     cell.RuleFunc[int64, int64](rule),
 			Schedule: schedule,
 			Initial:  []int64{0, 0, 0},
@@ -218,7 +218,7 @@ func TestGrowth(t *testing.T) {
 		return sum(ctx, self, neighbors, events)
 	}
 	e, err := New(Config[int64, int64]{
-		Topology: graph,
+		Links:    lattice.Edges(graph),
 		Rule:     cell.RuleFunc[int64, int64](rule),
 		Schedule: Synchronous,
 		Initial:  []int64{1},

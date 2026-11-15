@@ -35,8 +35,6 @@ const (
 	typeNoul         = "noul"
 	typeChoice       = "choice"
 	typeScore        = "score"
-	labelYes         = "yes"
-	labelNo          = "no"
 )
 
 type QuestionKind uint8
@@ -188,6 +186,7 @@ func (c *Client) AnswersContext(ctx context.Context, requests []annotate.Request
 				out = append(out, annotate.Answer{
 					Doc:      req.Doc,
 					Sentence: req.Sentence,
+					Mark:     req.Mark,
 					Question: q.Name,
 					Label:    label,
 					Score:    score,
@@ -276,9 +275,9 @@ func convert(q Question, raw json.RawMessage) (string, int64, bool) {
 		}
 		p := *a.Noul
 		if p >= 0.5 {
-			return labelYes, permille(p), true
+			return annotate.Yes, permille(p), true
 		}
-		return labelNo, permille(1 - p), true
+		return annotate.No, permille(1 - p), true
 	case Score:
 		if a.Type != typeScore || a.Score == nil || len(q.Options) < 2 {
 			return "", 0, false
