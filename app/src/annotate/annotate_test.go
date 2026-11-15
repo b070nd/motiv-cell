@@ -136,12 +136,23 @@ func TestCompare(t *testing.T) {
 	}
 }
 
-func TestFileDetectsDrift(t *testing.T) {
-	f := NewFile([]Answer{{Doc: "a", Sentence: 1, Mark: "old", Question: "q"}})
-	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 1, Mark: "old"}}); err != nil {
+func TestFileFollowsTextAndDetectsDrift(t *testing.T) {
+	f := NewFile([]Answer{
+		{Doc: "a", Sentence: 0, Mark: "x", Question: "q", Score: 1},
+		{Doc: "a", Sentence: 1, Mark: "y", Question: "q", Score: 2},
+		{Doc: "a", Sentence: 2, Mark: "x", Question: "q", Score: 3},
+	})
+	got, err := f.Answers([]Request{{Doc: "a", Sentence: 0, Mark: "y"}, {Doc: "a", Sentence: 1, Mark: "x"}, {Doc: "a", Sentence: 2, Mark: "x"}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 1, Mark: "new"}}); err != ErrDrift {
+	if len(got) != 3 || got[0].Score != 2 || got[0].Sentence != 0 || got[1].Score != 1 || got[1].Sentence != 1 || got[2].Score != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 0, Mark: "new"}}); err != ErrDrift {
 		t.Fatalf("got %v", err)
+	}
+	if got, err := f.Answers([]Request{{Doc: "unrecorded", Sentence: 0, Mark: "z"}}); err != nil || len(got) != 0 {
+		t.Fatalf("got %v %v", got, err)
 	}
 }

@@ -72,7 +72,7 @@ cd app && go run ./src/cmd/motivation compare -a ../data/annotations/live.jsonl 
 
 How a run works: documents are ordered by timestamp, the headline is sentence 0 and the body is split into sentences. Each sentence gets a fingerprint of its text. Each sentence is put to the questions in `config/questions.json`. The file must contain a choice question named `void` and a score question named `intensity`; a yes/no question named `pursuit` is optional. A misnamed or mistyped question is an error, not an empty result. A sentence becomes evidence when its void is not the `none` label and its yes-probability for `pursuit` is at least `pursuit_min` (per-mille). The first evidence for a void in a document creates a cell; cells in different documents with the same void are linked. The result is JSONL with one `run` line, then `cell`, `evidence` and `link` lines.
 
-Recorded answers carry the sentence fingerprint. A replay against text that splits or reads differently stops with an error instead of attaching answers to the wrong sentences; re-record after changing the news file or the splitter.
+Recorded answers carry the sentence fingerprint, and a replay matches answers to sentences by that fingerprint, not by position. Sentences that only moved (for example because one was inserted above them) keep their answers. A sentence whose text has no recorded answers, in a document that was recorded, stops the replay with an error; re-record after editing the text or changing the splitter.
 
 The answers depend on the laya checkpoint and on the exact question wording, and are uncalibrated. Set `LAYA_API_KEY` if the server requires a key.
 

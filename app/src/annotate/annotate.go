@@ -19,7 +19,7 @@ func (e Error) Error() string { return string(e) }
 const (
 	ErrNilProvider Error = "annotate: no inner provider"
 	ErrNilWriter   Error = "annotate: no writer"
-	ErrDrift       Error = "annotate: stored answer belongs to a different sentence text"
+	ErrDrift       Error = "annotate: a sentence has no recorded answers although its document was recorded"
 )
 
 const maxScore = 1000
@@ -128,36 +128,52 @@ func Sort(answers []Answer) {
 	slices.SortFunc(answers, compareAnswers)
 }
 
-type position struct {
-	doc      string
-	sentence int64
+type passage struct {
+	doc  string
+	mark string
 }
 
 type File struct {
-	byPosition map[position][]Answer
+	byPassage map[passage][][]Answer
+	docs      map[string]bool
 }
 
 func NewFile(answers []Answer) *File {
 	sorted := slices.Clone(answers)
 	Sort(sorted)
-	index := make(map[position][]Answer)
-	for _, a := range sorted {
-		p := position{doc: a.Doc, sentence: a.Sentence}
-		index[p] = append(index[p], a)
+	index := make(map[passage][][]Answer)
+	docs := make(map[string]bool)
+	for i, a := range sorted {
+		p := passage{doc: a.Doc, mark: a.Mark}
+		docs[a.Doc] = true
+		if i > 0 && sorted[i-1].Doc == a.Doc && sorted[i-1].Sentence == a.Sentence && sorted[i-1].Mark == a.Mark {
+			last := len(index[p]) - 1
+			index[p][last] = append(index[p][last], a)
+			continue
+		}
+		index[p] = append(index[p], []Answer{a})
 	}
-	return &File{byPosition: index}
+	return &File{byPassage: index, docs: docs}
 }
 
 func (f *File) Answers(requests []Request) ([]Answer, error) {
 	var out []Answer
+	seen := make(map[passage]int)
 	for _, req := range requests {
-		stored := f.byPosition[position{doc: req.Doc, sentence: req.Sentence}]
-		for _, a := range stored {
-			if a.Mark != req.Mark {
+		p := passage{doc: req.Doc, mark: req.Mark}
+		occurrence := seen[p]
+		seen[p]++
+		stored := f.byPassage[p]
+		if occurrence >= len(stored) {
+			if f.docs[req.Doc] {
 				return nil, ErrDrift
 			}
+			continue
 		}
-		out = append(out, stored...)
+		for _, a := range stored[occurrence] {
+			a.Sentence = req.Sentence
+			out = append(out, a)
+		}
 	}
 	return out, nil
 }
