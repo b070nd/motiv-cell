@@ -23,10 +23,12 @@ func universalStd() []string {
 
 func extraStd(pkg string) []string {
 	switch pkg {
-	case "cmd/motivation", "cmd/motivation-tui":
-		return []string{"os", "flag", "encoding/json"}
-	case "store", "ingest", "golden":
-		return []string{"os", "io/fs", "path/filepath"}
+	case "cmd/motivation":
+		return []string{"os", "flag"}
+	case "reading":
+		return []string{"crypto/sha256", "encoding/hex"}
+	case "evidence":
+		return []string{"encoding/json"}
 	case "newsfeed":
 		return []string{"encoding/json", "time"}
 	case "annotate":
@@ -40,38 +42,24 @@ func extraStd(pkg string) []string {
 func projectAllowed() map[string][]string {
 	return map[string][]string{
 		"model":     {},
-		"clock":     {},
 		"canon":     {},
 		"cell":      {},
-		"version":   {},
-		"golden":    {},
-		"config":    {"model"},
+		"segment":   {},
 		"lattice":   {"cell"},
-		"engine":    {"cell", "lattice", "clock"},
-		"ingest":    {"model"},
-		"newsfeed":  {"model", "ingest"},
+		"engine":    {"cell", "lattice"},
 		"motive":    {"model", "cell"},
+		"newsfeed":  {"model"},
+		"reading":   {"model", "segment"},
+		"annotate":  {"canon"},
 		"laya":      {"annotate"},
-		"market":    {"model"},
-		"segment":   {"model"},
-		"lexicon":   {"model", "config"},
-		"actors":    {"model", "lexicon", "market"},
-		"voids":     {"model", "lexicon"},
-		"evidence":  {"model", "lexicon"},
-		"peak":      {"model"},
-		"timeline":  {"model"},
-		"narrative": {"model", "actors", "voids", "evidence", "peak", "timeline"},
-		"annotate":  {"model", "canon"},
-		"agreement": {"annotate"},
-		"store":     {"model", "canon"},
-		"report":    {"model", "narrative", "agreement", "canon"},
-		"testkit":   {"model"},
-		"tui":       {"model", "narrative", "report"},
+		"evidence":  {"annotate"},
+		"narrative": {"model", "cell", "lattice", "engine", "motive", "reading", "annotate", "evidence"},
+		"report":    {"narrative", "canon"},
 	}
 }
 
 func isCmdPkg(pkg string) bool {
-	return pkg == "cmd/motivation" || pkg == "cmd/motivation-tui"
+	return pkg == "cmd/motivation"
 }
 
 func knownPackage(pkg string) bool {
@@ -84,7 +72,7 @@ func knownPackage(pkg string) bool {
 
 func strictPackage(pkg string) bool {
 	switch pkg {
-	case "cell", "lattice", "engine", "clock", "canon":
+	case "cell", "lattice", "engine", "canon":
 		return true
 	}
 	return false
@@ -303,7 +291,7 @@ func TestGuardDetects(t *testing.T) {
 		{"R5 float", "R5", "cell", "package p\nfunc f() float64 { return 0 }\n"},
 		{"R5 complex", "R5", "engine", "package p\nfunc f(c complex128) {}\n"},
 		{"R5 map", "R5", "lattice", "package p\ntype M map[int]int\n"},
-		{"R5 chan", "R5", "clock", "package p\ntype C chan int\n"},
+		{"R5 chan", "R5", "cell", "package p\ntype C chan int\n"},
 		{"R5 go", "R5", "canon", "package p\nfunc f() { go f() }\n"},
 		{"R5 select", "R5", "cell", "package p\nfunc f() { select {} }\n"},
 	}

@@ -33,18 +33,18 @@ func TestRoundTrip(t *testing.T) {
 
 func TestWriteBytes(t *testing.T) {
 	var buf bytes.Buffer
-	err := Write(&buf, []Answer{{Doc: "d1", Sentence: 3, Question: "q", Label: "yes", Score: 730}})
+	err := Write(&buf, []Answer{{Doc: "d1", Sentence: 3, Mark: "ab", Question: "q", Label: "yes", Score: 730}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"doc":"d1","label":"yes","question":"q","score":730,"sentence":3}` + "\n"
+	want := `{"doc":"d1","label":"yes","mark":"ab","question":"q","score":730,"sentence":3}` + "\n"
 	if buf.String() != want {
 		t.Fatalf("got %q want %q", buf.String(), want)
 	}
 }
 
 func TestReadErrors(t *testing.T) {
-	in := "\n" + `{"doc":"a","label":"","question":"q","score":1,"sentence":1}` + "\n\n" + "nope\n"
+	in := "\n" + `{"doc":"a","label":"","mark":"","question":"q","score":1,"sentence":1}` + "\n\n" + "nope\n"
 	_, err := Read(strings.NewReader(in))
 	if err == nil || !strings.Contains(err.Error(), "line 4") {
 		t.Fatalf("got %v", err)
@@ -133,5 +133,15 @@ func TestCompare(t *testing.T) {
 	}
 	if !reflect.DeepEqual(a, ac) || !reflect.DeepEqual(b, bc) {
 		t.Fatal("inputs mutated")
+	}
+}
+
+func TestFileDetectsDrift(t *testing.T) {
+	f := NewFile([]Answer{{Doc: "a", Sentence: 1, Mark: "old", Question: "q"}})
+	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 1, Mark: "old"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Answers([]Request{{Doc: "a", Sentence: 1, Mark: "new"}}); err != ErrDrift {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -19,19 +19,27 @@ func (e Error) Error() string { return string(e) }
 const (
 	ErrNilProvider Error = "annotate: no inner provider"
 	ErrNilWriter   Error = "annotate: no writer"
+	ErrDrift       Error = "annotate: stored answer belongs to a different sentence text"
 )
 
 const maxScore = 1000
 
+const (
+	Yes = "yes"
+	No  = "no"
+)
+
 type Request struct {
 	Doc      string
 	Sentence int64
+	Mark     string
 	Text     string
 }
 
 type Answer struct {
 	Doc      string
 	Sentence int64
+	Mark     string
 	Question string
 	Label    string
 	Score    int64
@@ -47,6 +55,7 @@ func Write(w io.Writer, answers []Answer) error {
 		err := cw.Write(
 			canon.Str("doc", a.Doc),
 			canon.Int("sentence", a.Sentence),
+			canon.Str("mark", a.Mark),
 			canon.Str("question", a.Question),
 			canon.Str("label", a.Label),
 			canon.Int("score", a.Score),
@@ -61,6 +70,7 @@ func Write(w io.Writer, answers []Answer) error {
 type record struct {
 	Doc      *string `json:"doc"`
 	Sentence *int64  `json:"sentence"`
+	Mark     *string `json:"mark"`
 	Question *string `json:"question"`
 	Label    *string `json:"label"`
 	Score    *int64  `json:"score"`
@@ -83,7 +93,7 @@ func Read(r io.Reader) ([]Answer, error) {
 			if jerr := json.Unmarshal([]byte(trimmed), &rec); jerr != nil {
 				return nil, lineError(line, "invalid record")
 			}
-			if rec.Doc == nil || rec.Sentence == nil || rec.Question == nil || rec.Label == nil || rec.Score == nil {
+			if rec.Doc == nil || rec.Sentence == nil || rec.Mark == nil || rec.Question == nil || rec.Label == nil || rec.Score == nil {
 				return nil, lineError(line, "missing field")
 			}
 			if *rec.Score < 0 || *rec.Score > maxScore {
@@ -92,6 +102,7 @@ func Read(r io.Reader) ([]Answer, error) {
 			out = append(out, Answer{
 				Doc:      *rec.Doc,
 				Sentence: *rec.Sentence,
+				Mark:     *rec.Mark,
 				Question: *rec.Question,
 				Label:    *rec.Label,
 				Score:    *rec.Score,
@@ -140,7 +151,13 @@ func NewFile(answers []Answer) *File {
 func (f *File) Answers(requests []Request) ([]Answer, error) {
 	var out []Answer
 	for _, req := range requests {
-		out = append(out, f.byPosition[position{doc: req.Doc, sentence: req.Sentence}]...)
+		stored := f.byPosition[position{doc: req.Doc, sentence: req.Sentence}]
+		for _, a := range stored {
+			if a.Mark != req.Mark {
+				return nil, ErrDrift
+			}
+		}
+		out = append(out, stored...)
 	}
 	return out, nil
 }

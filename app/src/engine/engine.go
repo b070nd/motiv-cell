@@ -13,12 +13,9 @@ type Error string
 func (e Error) Error() string { return string(e) }
 
 const (
-	ErrTopology Error = "engine: topology is nil"
 	ErrRule     Error = "engine: rule is nil"
 	ErrSchedule Error = "engine: unknown schedule"
-	ErrSize     Error = "engine: topology size out of range"
-	ErrInitial  Error = "engine: initial states do not match topology size"
-	ErrEdge     Error = "engine: topology returned an invalid edge"
+	ErrSize     Error = "engine: too many cells"
 	ErrDelivery Error = "engine: delivery target out of range"
 	ErrCell     Error = "engine: cell out of range"
 	ErrSource   Error = "engine: source is nil"
@@ -52,10 +49,10 @@ type Source[S, E any] interface {
 }
 
 type Config[S, E any] struct {
-	Topology lattice.Topology
 	Rule     cell.Rule[S, E]
 	Schedule Schedule
 	Initial  []S
+	Links    []lattice.Edge
 }
 
 type StepError struct {
@@ -95,44 +92,18 @@ type Engine[S, E any] struct {
 }
 
 func New[S, E any](config Config[S, E]) (*Engine[S, E], error) {
-	if config.Topology == nil {
-		return nil, ErrTopology
-	}
 	if config.Rule == nil {
 		return nil, ErrRule
 	}
 	if config.Schedule != Synchronous && config.Schedule != Sequential {
 		return nil, ErrSchedule
 	}
-	size := config.Topology.Size()
-	if size < 0 || size > lattice.MaxSize {
-		return nil, ErrSize
+	e := &Engine[S, E]{rule: config.Rule, schedule: config.Schedule}
+	if err := e.admit(config.Initial, config.Links); err != nil {
+		return nil, err
 	}
-	if len(config.Initial) != size {
-		return nil, ErrInitial
-	}
-	edges := make([][]inbound, size)
-	var buf []lattice.Edge
-	for at := 0; at < size; at++ {
-		to := cell.ID(at)
-		buf = config.Topology.Inbound(to, buf[:0])
-		for _, edge := range buf {
-			if edge.To != to || uint64(edge.From) >= uint64(size) {
-				return nil, ErrEdge
-			}
-			edges[at] = append(edges[at], inbound{from: edge.From, link: edge.Link})
-		}
-	}
-	current := make([]S, size)
-	copy(current, config.Initial)
-	return &Engine[S, E]{
-		rule:     config.Rule,
-		schedule: config.Schedule,
-		inbound:  edges,
-		current:  current,
-		pending:  make([]S, size),
-		bounds:   make([]int, size),
-	}, nil
+	e.marks = e.marks[:0]
+	return e, nil
 }
 
 func (e *Engine[S, E]) Size() int { return len(e.current) }
@@ -153,23 +124,15 @@ func (e *Engine[S, E]) States(buf []S) []S {
 
 func (e *Engine[S, E]) Step(batch Batch[S, E]) error {
 	before := len(e.current)
-	if len(batch.Add) > lattice.MaxSize-before {
-		return ErrSize
+	if err := e.admit(batch.Add, batch.Link); err != nil {
+		return err
 	}
-	size := before + len(batch.Add)
+	size := len(e.current)
 	for _, delivery := range batch.Deliveries {
 		if uint64(delivery.To) >= uint64(size) {
+			e.shrink(before)
 			return ErrDelivery
 		}
-	}
-	for _, edge := range batch.Link {
-		if uint64(edge.From) >= uint64(size) || uint64(edge.To) >= uint64(size) {
-			return ErrLink
-		}
-	}
-	if err := e.grow(batch.Add, batch.Link); err != nil {
-		e.shrink(before)
-		return err
 	}
 	events := e.distribute(batch.Deliveries)
 	tick := cell.Tick{Index: e.ticks, At: batch.At}
@@ -242,6 +205,24 @@ func (e *Engine[S, E]) distribute(deliveries []Delivery[E]) []E {
 		e.bounds[delivery.To]++
 	}
 	return e.events
+}
+
+func (e *Engine[S, E]) admit(add []S, link []lattice.Edge) error {
+	before := len(e.current)
+	if len(add) > lattice.MaxSize-before {
+		return ErrSize
+	}
+	size := before + len(add)
+	for _, edge := range link {
+		if uint64(edge.From) >= uint64(size) || uint64(edge.To) >= uint64(size) {
+			return ErrLink
+		}
+	}
+	if err := e.grow(add, link); err != nil {
+		e.shrink(before)
+		return err
+	}
+	return nil
 }
 
 func (e *Engine[S, E]) grow(add []S, link []lattice.Edge) error {

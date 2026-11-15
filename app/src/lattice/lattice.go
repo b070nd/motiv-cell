@@ -45,3 +45,11 @@ func compare(a, b Edge) int {
 func within(id cell.ID, size int) bool {
 	return size > 0 && uint64(id) < uint64(size)
 }
+
+func Edges(t Topology) []Edge {
+	var out []Edge
+	for at := 0; at < t.Size(); at++ {
+		out = t.Inbound(cell.ID(at), out)
+	}
+	return out
+}
