@@ -6,6 +6,7 @@ import (
 
 	"github.com/b070nd/motiv-cell/src/actors"
 	"github.com/b070nd/motiv-cell/src/annotate"
+	"github.com/b070nd/motiv-cell/src/cell"
 	"github.com/b070nd/motiv-cell/src/evidence"
 	"github.com/b070nd/motiv-cell/src/lattice"
 	"github.com/b070nd/motiv-cell/src/model"
@@ -56,8 +57,11 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Docs != 2 || result.Sentences != 5 || result.Answers != 15 || result.Ticks != 5 {
+	if result.Docs != 2 || result.Sentences != 5 || result.Answers != 15 || result.Ticks != 6 {
 		t.Fatalf("counts %+v", result)
+	}
+	if len(result.Timeline) != 2 || result.Timeline[0] != (Moment{Doc: "a", At: 1}) {
+		t.Fatalf("timeline %+v", result.Timeline)
 	}
 	if len(result.Cells) != 2 || result.Cells[0].State.ID != "a##capital" || result.Cells[1].Doc != "b" {
 		t.Fatalf("cells %+v", result.Cells)
@@ -108,29 +112,52 @@ func TestBuildOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Cells) != 3 {
+	var documents, threads []Cell
+	var docIDs []cell.ID
+	for i, c := range result.Cells {
+		switch c.State.Level {
+		case model.LevelDocument:
+			documents = append(documents, c)
+			docIDs = append(docIDs, cell.ID(i))
+		case model.LevelThread:
+			threads = append(threads, c)
+		}
+	}
+	if len(documents) != 3 || len(threads) != 2 {
 		t.Fatalf("cells %+v", result.Cells)
 	}
-	first, third := result.Cells[0], result.Cells[2]
+	first, third := documents[0], documents[2]
 	if first.Owner != "alpha" || first.State.ID != "a#alpha#capital" || len(first.State.Owners) != 1 || len(first.State.Evidence) != 2 {
 		t.Fatalf("carry-forward failed: %+v", first)
 	}
-	if result.Cells[1].Owner != "beta" || third.Owner != "alpha" || len(third.State.Evidence) != 2 {
-		t.Fatalf("owners %+v", result.Cells)
+	if documents[1].Owner != "beta" || third.Owner != "alpha" || len(third.State.Evidence) != 2 || third.State.Place != 2 {
+		t.Fatalf("owners %+v", documents)
 	}
-	var sameVoid, sameOwner int
+	alpha := threads[0].State
+	if alpha.ID != "#alpha#capital" || len(alpha.Evidence) != 2 || alpha.Evidence[0] != (model.Evidence{Position: 0, Intensity: 1000}) || alpha.Evidence[1] != (model.Evidence{Position: 2, Intensity: 800}) {
+		t.Fatalf("alpha thread %+v", alpha)
+	}
+	if alpha.Peak.Total != 0 || alpha.Peak.Slope != 800 || alpha.Peak.Bend != 1800 {
+		t.Fatalf("alpha peak %+v", alpha.Peak)
+	}
+	if beta := threads[1].State; beta.ID != "#beta#capital" || len(beta.Evidence) != 1 || beta.Evidence[0].Position != 1 {
+		t.Fatalf("beta thread %+v", beta)
+	}
+	var sameVoid, sameOwner, part int
 	for _, link := range result.Links {
 		switch link.Link {
 		case SameVoid:
 			sameVoid++
 		case SameOwner:
 			sameOwner++
-			if (link.From != 0 || link.To != 2) && (link.From != 2 || link.To != 0) {
+			if (link.From != docIDs[0] || link.To != docIDs[2]) && (link.From != docIDs[2] || link.To != docIDs[0]) {
 				t.Fatalf("same-owner link %+v", link)
 			}
+		case Part:
+			part++
 		}
 	}
-	if sameVoid != 6 || sameOwner != 2 {
-		t.Fatalf("links void %d owner %d", sameVoid, sameOwner)
+	if sameVoid != 6 || sameOwner != 2 || part != 3 {
+		t.Fatalf("links void %d owner %d part %d", sameVoid, sameOwner, part)
 	}
 }

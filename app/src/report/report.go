@@ -2,10 +2,18 @@ package report
 
 import (
 	"io"
+	"strconv"
 
 	"github.com/b070nd/motiv-cell/src/canon"
+	"github.com/b070nd/motiv-cell/src/model"
 	"github.com/b070nd/motiv-cell/src/narrative"
 )
+
+type Error string
+
+func (e Error) Error() string { return string(e) }
+
+const ErrPosition Error = "report: thread evidence outside the timeline"
 
 func Write(w io.Writer, result narrative.Result) error {
 	writer := canon.NewWriter(w)
@@ -24,6 +32,7 @@ func Write(w io.Writer, result narrative.Result) error {
 		fields := []canon.Field{
 			canon.Str("type", "cell"),
 			canon.Int("cell", int64(i)),
+			canon.Int("level", int64(c.State.Level)),
 			canon.Str("id", c.State.ID),
 			canon.Str("doc", c.Doc),
 			canon.Str("owner", c.Owner),
@@ -46,12 +55,25 @@ func Write(w io.Writer, result narrative.Result) error {
 			return err
 		}
 		for _, item := range c.State.Evidence {
-			if err := writer.Write(
+			fields := []canon.Field{
 				canon.Str("type", "evidence"),
 				canon.Int("cell", int64(i)),
-				canon.Int("sentence", item.Sentence),
 				canon.Int("intensity", item.Intensity),
-			); err != nil {
+			}
+			if c.State.Level == model.LevelThread {
+				if item.Position < 0 || item.Position >= int64(len(result.Timeline)) {
+					return Error(string(ErrPosition) + ": " + strconv.FormatInt(item.Position, 10))
+				}
+				moment := result.Timeline[item.Position]
+				fields = append(fields,
+					canon.Int("position", item.Position),
+					canon.Str("doc", moment.Doc),
+					canon.Int("at", moment.At),
+				)
+			} else {
+				fields = append(fields, canon.Int("sentence", item.Position))
+			}
+			if err := writer.Write(fields...); err != nil {
 				return err
 			}
 		}

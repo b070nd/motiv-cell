@@ -55,7 +55,7 @@ func projectAllowed() map[string][]string {
 		"laya":      {"annotate"},
 		"evidence":  {"annotate"},
 		"narrative": {"actors", "model", "cell", "lattice", "engine", "motive", "reading", "annotate", "evidence"},
-		"report":    {"narrative", "canon"},
+		"report":    {"narrative", "model", "canon"},
 	}
 }
 

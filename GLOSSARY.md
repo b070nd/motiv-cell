@@ -1,10 +1,18 @@
 # Glossary
 
-**Motivation Cell**: one motivation of one owner in one document: who wants something (owners), what they lack (void), the evidence for it, and where it peaks.
+**Motivation Cell**: one motivation: who wants something (owners), what they lack (void), the evidence for it, and where it peaks. It is either a document cell or a thread cell.
+
+**Document cell**: a Motivation Cell for one owner and void in one document (level 1). Its evidence is sentences.
+
+**Thread cell**: a Motivation Cell for one owner and void across all documents (level 2). It reads its document cells through part links; its evidence is one point per document, by position in time order.
+
+**Part link**: a link (kind 3) from a document cell to its thread cell. The only link a cell reads.
+
+**Timeline**: the documents of a run in timestamp order; a thread's positions index it.
 
 **Void**: what an actor lacks or wants. Labelled from a fixed option list in the questions file.
 
-**Evidence**: one sentence that shows a void being pursued, with a sentence index and an integer intensity (per-mille).
+**Evidence**: a position and an integer intensity (per-mille). In a document cell the position is a sentence that shows a void being pursued; in a thread cell it is a document on the timeline, with the document cell's summed intensity.
 
 **Peak**: where a motivation is strongest. Holds a supplied value and a computed field (highest total, strongest single item, centre, slope, bend).
 
@@ -30,4 +38,4 @@
 
 **Narrative**: the result of a run: the cells, their evidence and the links between them.
 
-**Tick**: one step of the engine. In a run, one tick per sentence in reading order.
+**Tick**: one step of the engine. In a run, one tick per sentence in reading order, plus one closing tick so thread cells see the last evidence.
