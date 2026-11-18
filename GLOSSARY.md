@@ -1,6 +1,6 @@
 # Glossary
 
-**Motivation Cell**: one motivation in one document: who wants something (owners), what they lack (void), the evidence for it, and where it peaks.
+**Motivation Cell**: one motivation of one owner in one document: who wants something (owners), what they lack (void), the evidence for it, and where it peaks.
 
 **Void**: what an actor lacks or wants. Labelled from a fixed option list in the questions file.
 
@@ -8,7 +8,15 @@
 
 **Peak**: where a motivation is strongest. Holds a supplied value and a computed field (highest total, strongest single item, centre, slope, bend).
 
-**Same-void link**: a two-way link between cells in different documents that share a void label.
+**Actor**: a company, institution or person listed in the gazetteer, with an id, a name, aliases and tickers.
+
+**Gazetteer**: the user-supplied list of actors that owners are matched against.
+
+**Owner**: the actor a Motivation Cell belongs to: the first actor named in the evidence sentence, or the most recent one named earlier in the document.
+
+**Same-void link**: a two-way link (kind 1) between cells that share a void label.
+
+**Same-owner link**: a two-way link (kind 2) between cells that share an owner.
 
 **Reading**: a document turned into numbered sentences, each with a mark.
 

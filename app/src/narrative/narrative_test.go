@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/b070nd/motiv-cell/src/actors"
 	"github.com/b070nd/motiv-cell/src/annotate"
 	"github.com/b070nd/motiv-cell/src/evidence"
 	"github.com/b070nd/motiv-cell/src/lattice"
@@ -51,14 +52,14 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Build(docs(), annotate.NewFile(answers(t)), spec)
+	result, err := Build(docs(), annotate.NewFile(answers(t)), spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Docs != 2 || result.Sentences != 5 || result.Answers != 15 || result.Ticks != 5 {
 		t.Fatalf("counts %+v", result)
 	}
-	if len(result.Cells) != 2 || result.Cells[0].State.ID != "a#capital" || result.Cells[1].Doc != "b" {
+	if len(result.Cells) != 2 || result.Cells[0].State.ID != "a##capital" || result.Cells[1].Doc != "b" {
 		t.Fatalf("cells %+v", result.Cells)
 	}
 	first := result.Cells[0].State
@@ -81,7 +82,55 @@ func TestBuildRejectsDriftedAnswers(t *testing.T) {
 	}
 	changed := docs()
 	changed[1].Body = "It sells its assets."
-	if _, err := Build(changed, annotate.NewFile(answers(t)), spec); err != annotate.ErrDrift {
+	if _, err := Build(changed, annotate.NewFile(answers(t)), spec, nil); err != annotate.ErrDrift {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestBuildOwners(t *testing.T) {
+	spec, err := evidence.Parse(strings.NewReader(questions))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gazetteer, err := actors.New([]actors.Actor{{ID: "alpha", Name: "Alpha"}, {ID: "beta", Name: "Beta"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra := append(docs(), model.Doc{ID: "c", At: 3, Headline: "Alpha returns", Body: "It wants cash."})
+	stored := answers(t)
+	for i, sentence := range reading.Sentences(extra[2]) {
+		stored = append(stored,
+			annotate.Answer{Doc: "c", Sentence: int64(i), Mark: sentence.Mark, Question: "void", Label: "capital", Score: 900},
+			annotate.Answer{Doc: "c", Sentence: int64(i), Mark: sentence.Mark, Question: "pursuit", Label: "yes", Score: 800},
+			annotate.Answer{Doc: "c", Sentence: int64(i), Mark: sentence.Mark, Question: "intensity", Score: 400})
+	}
+	result, err := Build(extra, annotate.NewFile(stored), spec, gazetteer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Cells) != 3 {
+		t.Fatalf("cells %+v", result.Cells)
+	}
+	first, third := result.Cells[0], result.Cells[2]
+	if first.Owner != "alpha" || first.State.ID != "a#alpha#capital" || len(first.State.Owners) != 1 || len(first.State.Evidence) != 2 {
+		t.Fatalf("carry-forward failed: %+v", first)
+	}
+	if result.Cells[1].Owner != "beta" || third.Owner != "alpha" || len(third.State.Evidence) != 2 {
+		t.Fatalf("owners %+v", result.Cells)
+	}
+	var sameVoid, sameOwner int
+	for _, link := range result.Links {
+		switch link.Link {
+		case SameVoid:
+			sameVoid++
+		case SameOwner:
+			sameOwner++
+			if (link.From != 0 || link.To != 2) && (link.From != 2 || link.To != 0) {
+				t.Fatalf("same-owner link %+v", link)
+			}
+		}
+	}
+	if sameVoid != 6 || sameOwner != 2 {
+		t.Fatalf("links void %d owner %d", sameVoid, sameOwner)
 	}
 }

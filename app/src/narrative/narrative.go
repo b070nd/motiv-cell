@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 
+	"github.com/b070nd/motiv-cell/src/actors"
 	"github.com/b070nd/motiv-cell/src/annotate"
 	"github.com/b070nd/motiv-cell/src/cell"
 	"github.com/b070nd/motiv-cell/src/engine"
@@ -14,10 +15,14 @@ import (
 	"github.com/b070nd/motiv-cell/src/reading"
 )
 
-const SameVoid = cell.Link(1)
+const (
+	SameVoid  = cell.Link(1)
+	SameOwner = cell.Link(2)
+)
 
 type Cell struct {
 	Doc   string
+	Owner string
 	State model.Motivation
 }
 
@@ -35,14 +40,20 @@ type place struct {
 	sentence int64
 }
 
-func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec) (Result, error) {
+func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec, gazetteer *actors.Gazetteer) (Result, error) {
 	if err := spec.Validate(); err != nil {
 		return Result{}, err
 	}
 	docs = ordered(docs)
 	var requests []annotate.Request
+	var owners []string
 	for _, doc := range docs {
+		owner := ""
 		for _, sentence := range reading.Sentences(doc) {
+			if found := gazetteer.Find(sentence.Text); len(found) > 0 {
+				owner = found[0]
+			}
+			owners = append(owners, owner)
 			requests = append(requests, annotate.Request{Doc: doc.ID, Sentence: sentence.Index, Mark: sentence.Mark, Text: sentence.Text})
 		}
 	}
@@ -58,27 +69,33 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec) (Re
 	result := Result{Docs: int64(len(docs)), Sentences: int64(len(requests)), Answers: int64(len(answers))}
 	var items []engine.Item[model.Signal]
 	var changes []engine.Change[model.Motivation]
-	var cellDocs []string
+	var cells []Cell
 	ids := map[string]cell.ID{}
 	sameVoid := map[string][]cell.ID{}
+	sameOwner := map[string][]cell.ID{}
 	for at, request := range requests {
 		finding, ok := spec.Read(grouped[place{doc: request.Doc, sentence: request.Sentence}])
 		if !ok {
 			continue
 		}
-		name := request.Doc + "#" + finding.Void
+		owner := owners[at]
+		name := request.Doc + "#" + owner + "#" + finding.Void
 		id, known := ids[name]
 		if !known {
-			id = cell.ID(len(cellDocs))
+			id = cell.ID(len(cells))
 			ids[name] = id
-			cellDocs = append(cellDocs, request.Doc)
-			change := engine.Change[model.Motivation]{At: int64(at), Add: []model.Motivation{{ID: name, VoidLabel: finding.Void}}}
-			for _, other := range sameVoid[finding.Void] {
-				change.Link = append(change.Link,
-					lattice.Edge{From: other, To: id, Link: SameVoid},
-					lattice.Edge{From: id, To: other, Link: SameVoid})
+			cells = append(cells, Cell{Doc: request.Doc, Owner: owner})
+			state := model.Motivation{ID: name, VoidLabel: finding.Void}
+			if owner != "" {
+				state.Owners = []string{owner}
 			}
+			change := engine.Change[model.Motivation]{At: int64(at), Add: []model.Motivation{state}}
+			change.Link = both(change.Link, sameVoid[finding.Void], id, SameVoid)
 			sameVoid[finding.Void] = append(sameVoid[finding.Void], id)
+			if owner != "" {
+				change.Link = both(change.Link, sameOwner[owner], id, SameOwner)
+				sameOwner[owner] = append(sameOwner[owner], id)
+			}
 			changes = append(changes, change)
 			result.Links = append(result.Links, change.Link...)
 		}
@@ -100,8 +117,9 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec) (Re
 	}
 	result.Ticks = int64(machine.Ticks())
 	for i, state := range machine.States(nil) {
-		result.Cells = append(result.Cells, Cell{Doc: cellDocs[i], State: state})
+		cells[i].State = state
 	}
+	result.Cells = cells
 	return result, nil
 }
 
@@ -111,4 +129,13 @@ func ordered(docs []model.Doc) []model.Doc {
 		return cmp.Or(cmp.Compare(a.At, b.At), cmp.Compare(a.ID, b.ID))
 	})
 	return sorted
+}
+
+func both(links []lattice.Edge, others []cell.ID, id cell.ID, kind cell.Link) []lattice.Edge {
+	for _, other := range others {
+		links = append(links,
+			lattice.Edge{From: other, To: id, Link: kind},
+			lattice.Edge{From: id, To: other, Link: kind})
+	}
+	return links
 }

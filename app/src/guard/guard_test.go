@@ -27,7 +27,7 @@ func extraStd(pkg string) []string {
 		return []string{"os", "flag"}
 	case "reading":
 		return []string{"crypto/sha256", "encoding/hex"}
-	case "evidence":
+	case "evidence", "actors":
 		return []string{"encoding/json"}
 	case "newsfeed":
 		return []string{"encoding/json", "time"}
@@ -45,6 +45,7 @@ func projectAllowed() map[string][]string {
 		"canon":     {},
 		"cell":      {},
 		"segment":   {},
+		"actors":    {},
 		"lattice":   {"cell"},
 		"engine":    {"cell", "lattice"},
 		"motive":    {"model", "cell"},
@@ -53,7 +54,7 @@ func projectAllowed() map[string][]string {
 		"annotate":  {"canon"},
 		"laya":      {"annotate"},
 		"evidence":  {"annotate"},
-		"narrative": {"model", "cell", "lattice", "engine", "motive", "reading", "annotate", "evidence"},
+		"narrative": {"actors", "model", "cell", "lattice", "engine", "motive", "reading", "annotate", "evidence"},
 		"report":    {"narrative", "canon"},
 	}
 }

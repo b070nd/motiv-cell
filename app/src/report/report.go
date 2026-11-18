@@ -26,6 +26,7 @@ func Write(w io.Writer, result narrative.Result) error {
 			canon.Int("cell", int64(i)),
 			canon.Str("id", c.State.ID),
 			canon.Str("doc", c.Doc),
+			canon.Str("owner", c.Owner),
 			canon.Str("void", c.State.VoidLabel),
 			canon.Int("evidence", int64(len(c.State.Evidence))),
 		}

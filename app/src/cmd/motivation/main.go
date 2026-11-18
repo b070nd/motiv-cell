@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/b070nd/motiv-cell/src/actors"
 	"github.com/b070nd/motiv-cell/src/annotate"
 	"github.com/b070nd/motiv-cell/src/evidence"
 	"github.com/b070nd/motiv-cell/src/laya"
@@ -52,6 +53,7 @@ func run(args []string, stdout io.Writer) error {
 	layaURL := flags.String("laya", "", "laya-serve base URL (live mode)")
 	answersPath := flags.String("answers", "", "recorded answers JSONL (file mode)")
 	recordPath := flags.String("record", "", "write live answers to this JSONL file")
+	actorsPath := flags.String("actors", "", "actors gazetteer JSONL (optional)")
 	outPath := flags.String("out", "", "result JSONL file (default stdout)")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -83,7 +85,17 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	result, err := narrative.Build(docs, provider, spec)
+	var gazetteer *actors.Gazetteer
+	if *actorsPath != "" {
+		actorsData, err := os.ReadFile(*actorsPath)
+		if err != nil {
+			return err
+		}
+		if gazetteer, err = actors.Parse(bytes.NewReader(actorsData)); err != nil {
+			return err
+		}
+	}
+	result, err := narrative.Build(docs, provider, spec, gazetteer)
 	if err != nil {
 		return err
 	}
