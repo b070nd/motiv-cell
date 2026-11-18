@@ -18,6 +18,7 @@ import (
 const (
 	SameVoid  = cell.Link(1)
 	SameOwner = cell.Link(2)
+	Part      = motive.Part
 )
 
 type Cell struct {
@@ -26,11 +27,17 @@ type Cell struct {
 	State model.Motivation
 }
 
+type Moment struct {
+	Doc string
+	At  int64
+}
+
 type Result struct {
 	Docs      int64
 	Sentences int64
 	Answers   int64
 	Ticks     int64
+	Timeline  []Moment
 	Cells     []Cell
 	Links     []lattice.Edge
 }
@@ -45,6 +52,12 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec, gaz
 		return Result{}, err
 	}
 	docs = ordered(docs)
+	rank := map[string]int64{}
+	timeline := make([]Moment, len(docs))
+	for i, doc := range docs {
+		rank[doc.ID] = int64(i)
+		timeline[i] = Moment{Doc: doc.ID, At: doc.At}
+	}
 	var requests []annotate.Request
 	var owners []string
 	for _, doc := range docs {
@@ -66,11 +79,12 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec, gaz
 		key := place{doc: answer.Doc, sentence: answer.Sentence}
 		grouped[key] = append(grouped[key], answer)
 	}
-	result := Result{Docs: int64(len(docs)), Sentences: int64(len(requests)), Answers: int64(len(answers))}
+	result := Result{Docs: int64(len(docs)), Sentences: int64(len(requests)), Answers: int64(len(answers)), Timeline: timeline}
 	var items []engine.Item[model.Signal]
 	var changes []engine.Change[model.Motivation]
 	var cells []Cell
 	ids := map[string]cell.ID{}
+	threads := map[string]cell.ID{}
 	sameVoid := map[string][]cell.ID{}
 	sameOwner := map[string][]cell.ID{}
 	for at, request := range requests {
@@ -85,11 +99,22 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec, gaz
 			id = cell.ID(len(cells))
 			ids[name] = id
 			cells = append(cells, Cell{Doc: request.Doc, Owner: owner})
-			state := model.Motivation{ID: name, VoidLabel: finding.Void}
+			state := model.Motivation{ID: name, Level: model.LevelDocument, Place: rank[request.Doc], VoidLabel: finding.Void}
 			if owner != "" {
 				state.Owners = []string{owner}
 			}
 			change := engine.Change[model.Motivation]{At: int64(at), Add: []model.Motivation{state}}
+			if owner != "" {
+				key := "#" + owner + "#" + finding.Void
+				parent, exists := threads[key]
+				if !exists {
+					parent = cell.ID(len(cells))
+					threads[key] = parent
+					cells = append(cells, Cell{Owner: owner})
+					change.Add = append(change.Add, model.Motivation{ID: key, Level: model.LevelThread, Owners: []string{owner}, VoidLabel: finding.Void})
+				}
+				change.Link = append(change.Link, lattice.Edge{From: id, To: parent, Link: motive.Part})
+			}
 			change.Link = both(change.Link, sameVoid[finding.Void], id, SameVoid)
 			sameVoid[finding.Void] = append(sameVoid[finding.Void], id)
 			if owner != "" {
@@ -101,14 +126,14 @@ func Build(docs []model.Doc, provider annotate.Provider, spec evidence.Spec, gaz
 		}
 		items = append(items, engine.Item[model.Signal]{At: int64(at), To: id, Event: model.Signal{
 			Kind:     model.SignalEvidence,
-			Evidence: model.Evidence{Sentence: request.Sentence, Intensity: finding.Intensity},
+			Evidence: model.Evidence{Position: request.Sentence, Intensity: finding.Intensity},
 		}})
 	}
 	machine, err := engine.New(engine.Config[model.Motivation, model.Signal]{Rule: motive.Rule{}, Schedule: engine.Synchronous})
 	if err != nil {
 		return Result{}, err
 	}
-	feed, err := engine.NewDiscourse(items, changes, result.Sentences)
+	feed, err := engine.NewDiscourse(items, changes, result.Sentences+1)
 	if err != nil {
 		return Result{}, err
 	}

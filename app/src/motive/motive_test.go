@@ -9,7 +9,7 @@ import (
 )
 
 func ev(sentence, intensity int64) model.Signal {
-	return model.Signal{Kind: model.SignalEvidence, Evidence: model.Evidence{Sentence: sentence, Intensity: intensity}}
+	return model.Signal{Kind: model.SignalEvidence, Evidence: model.Evidence{Position: sentence, Intensity: intensity}}
 }
 
 func TestField(t *testing.T) {
@@ -44,5 +44,35 @@ func TestField(t *testing.T) {
 	}
 	if _, err := (Rule{}).Step(cell.Context{}, m, nil, []model.Signal{{Kind: 9}}); !errors.Is(err, ErrSignal) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestThreadReadsItsParts(t *testing.T) {
+	doc := func(place int64, intensities ...int64) model.Motivation {
+		state := model.Motivation{Level: model.LevelDocument, Place: place}
+		for i, intensity := range intensities {
+			state.Evidence = append(state.Evidence, model.Evidence{Position: int64(i), Intensity: intensity})
+		}
+		return state
+	}
+	neighbors := []cell.Neighbor[model.Motivation]{
+		{ID: 3, Link: Part, State: doc(2, 400, 400)},
+		{ID: 0, Link: Part, State: doc(0, 300, 700)},
+		{ID: 1, Link: cell.Link(1), State: doc(1, 999)},
+		{ID: 5, Link: Part, State: doc(4)},
+	}
+	got, err := Rule{}.Step(cell.Context{}, model.Motivation{Level: model.LevelThread}, neighbors, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []model.Evidence{{Position: 0, Intensity: 1000}, {Position: 2, Intensity: 800}}
+	if len(got.Evidence) != 2 || got.Evidence[0] != want[0] || got.Evidence[1] != want[1] {
+		t.Fatalf("evidence %+v", got.Evidence)
+	}
+	if !got.Peak.Known || got.Peak.Total != 0 || got.Peak.Slope != 800 || got.Peak.Bend != 1800 {
+		t.Fatalf("peak %+v", got.Peak)
+	}
+	if _, err := (Rule{}).Step(cell.Context{}, model.Motivation{Level: model.LevelThread}, nil, []model.Signal{ev(0, 1)}); err != ErrThread {
+		t.Fatalf("signal to thread: %v", err)
 	}
 }

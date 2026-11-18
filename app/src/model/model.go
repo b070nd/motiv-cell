@@ -9,7 +9,7 @@ type Doc struct {
 }
 
 type Evidence struct {
-	Sentence  int64
+	Position  int64
 	Intensity int64
 }
 
@@ -24,8 +24,17 @@ type Peak struct {
 	Supplied    int64
 }
 
+type Level uint8
+
+const (
+	LevelDocument Level = 1
+	LevelThread   Level = 2
+)
+
 type Motivation struct {
 	ID        string
+	Level     Level
+	Place     int64
 	Owners    []string
 	VoidText  string
 	VoidLabel string
