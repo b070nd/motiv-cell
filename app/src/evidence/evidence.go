@@ -13,14 +13,15 @@ type Error string
 func (e Error) Error() string { return string(e) }
 
 const (
-	ErrFile      Error = "evidence: questions file is not valid"
-	ErrName      Error = "evidence: question name is empty or repeated"
-	ErrKind      Error = "evidence: question kind must be choice, yesno or score"
-	ErrVoid      Error = "evidence: a choice question named void is required"
-	ErrNone      Error = "evidence: the none label is not an option of the void question"
-	ErrIntensity Error = "evidence: a score question named intensity with at least two levels is required"
-	ErrPursuit   Error = "evidence: the pursuit question must be yesno"
-	ErrThreshold Error = "evidence: pursuit_min must be between 0 and 1000"
+	ErrFile       Error = "evidence: questions file is not valid"
+	ErrName       Error = "evidence: question name is empty or repeated"
+	ErrKind       Error = "evidence: question kind must be choice, yesno or score"
+	ErrVoid       Error = "evidence: a choice question named void is required"
+	ErrNone       Error = "evidence: the none label is not an option of the void question"
+	ErrIntensity  Error = "evidence: a score question named intensity with at least two levels is required"
+	ErrPursuit    Error = "evidence: the pursuit question must be yesno"
+	ErrThreshold  Error = "evidence: pursuit_min must be between 0 and 1000"
+	ErrCapability Error = "evidence: the capability question must be a choice with at least two options"
 )
 
 const (
@@ -33,6 +34,10 @@ const (
 	RoleVoid      = "void"
 	RolePursuit   = "pursuit"
 	RoleIntensity = "intensity"
+	// RoleCapability asks whether the text presents the actor as able to get
+	// what it wants. Its answers are validated and recorded but not yet read
+	// into findings, so they change no cell.
+	RoleCapability = "capability"
 )
 
 const scale = 1000
@@ -100,6 +105,10 @@ func (s Spec) Validate() error {
 		case RolePursuit:
 			if q.Kind != KindYesNo {
 				return ErrPursuit
+			}
+		case RoleCapability:
+			if q.Kind != KindChoice || len(q.Options) < 2 {
+				return ErrCapability
 			}
 		}
 	}

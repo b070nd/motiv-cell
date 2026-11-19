@@ -10,21 +10,24 @@ import (
 const good = `{"model":"english","none":"none","pursuit_min":500,"questions":[
 {"name":"void","kind":"choice","text":"?","options":["capital","none"]},
 {"name":"pursuit","kind":"yesno","text":"?"},
-{"name":"intensity","kind":"score","text":"?","options":["low","high"]}]}`
+{"name":"intensity","kind":"score","text":"?","options":["low","high"]},
+{"name":"capability","kind":"choice","text":"?","options":["able","unable","not stated"]}]}`
 
 func TestParse(t *testing.T) {
 	if _, err := Parse(strings.NewReader(good)); err != nil {
 		t.Fatal(err)
 	}
 	for bad, want := range map[string]error{
-		strings.Replace(good, `"name":"void"`, `"name":"gap"`, 1):           ErrVoid,
-		strings.Replace(good, `"none":"none"`, `"none":"nothing"`, 1):       ErrNone,
-		strings.Replace(good, `"kind":"score"`, `"kind":"choice"`, 1):       ErrIntensity,
-		strings.Replace(good, `"kind":"yesno"`, `"kind":"score"`, 1):        ErrPursuit,
-		strings.Replace(good, `"pursuit_min":500`, `"pursuit_min":1001`, 1): ErrThreshold,
-		strings.Replace(good, `"model":"english"`, `"modle":"english"`, 1):  ErrFile,
-		strings.Replace(good, `"name":"pursuit"`, `"name":"void"`, 1):       ErrName,
-		strings.Replace(good, `"kind":"yesno"`, `"kind":"maybe"`, 1):        ErrKind,
+		strings.Replace(good, `"name":"void"`, `"name":"gap"`, 1):                                             ErrVoid,
+		strings.Replace(good, `"none":"none"`, `"none":"nothing"`, 1):                                         ErrNone,
+		strings.Replace(good, `"kind":"score"`, `"kind":"choice"`, 1):                                         ErrIntensity,
+		strings.Replace(good, `"kind":"yesno"`, `"kind":"score"`, 1):                                          ErrPursuit,
+		strings.Replace(good, `"pursuit_min":500`, `"pursuit_min":1001`, 1):                                   ErrThreshold,
+		strings.Replace(good, `"model":"english"`, `"modle":"english"`, 1):                                    ErrFile,
+		strings.Replace(good, `"name":"pursuit"`, `"name":"void"`, 1):                                         ErrName,
+		strings.Replace(good, `"kind":"yesno"`, `"kind":"maybe"`, 1):                                          ErrKind,
+		strings.Replace(good, `"options":["able","unable","not stated"]`, `"options":["able"]`, 1):            ErrCapability,
+		strings.Replace(good, `"name":"capability","kind":"choice"`, `"name":"capability","kind":"yesno"`, 1): ErrCapability,
 	} {
 		if _, err := Parse(strings.NewReader(bad)); err != want {
 			t.Fatalf("got %v want %v", err, want)
@@ -42,6 +45,7 @@ func TestRead(t *testing.T) {
 			{Question: "void", Label: void, Score: 900},
 			{Question: "pursuit", Label: pursuit, Score: p},
 			{Question: "intensity", Score: intensity},
+			{Question: "capability", Label: "unable", Score: 800},
 		}
 	}
 	if f, ok := spec.Read(answers("capital", "yes", 700, 640)); !ok || f != (Finding{Void: "capital", Intensity: 640}) {
@@ -57,6 +61,9 @@ func TestRead(t *testing.T) {
 		t.Fatal("none label")
 	}
 	if _, ok := spec.Read(answers("capital", "yes", 900, 640)[:2]); ok {
+		t.Fatal("missing intensity")
+	}
+	if _, ok := spec.Read(answers("capital", "yes", 900, 640)[3:]); ok {
 		t.Fatal("missing intensity")
 	}
 }
