@@ -19,6 +19,12 @@
       "kind": "score",
       "text": "How forcefully is the goal pursued in this sentence?",
       "options": ["not at all", "weakly", "moderately", "strongly", "desperately"]
+    },
+    {
+      "name": "capability",
+      "kind": "choice",
+      "text": "Does the sentence present the main actor as able to get what it wants?",
+      "options": ["able", "unable", "not stated"]
     }
   ]
 }
