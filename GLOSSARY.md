@@ -12,6 +12,8 @@
 
 **Void**: what an actor lacks or wants. Labelled from a fixed option list in the questions file.
 
+**Capability**: an optional question: does the text present the actor as able to get what it wants (able, unable, not stated). Recorded, not yet used by cells. The want / can split follows the Functional Motivation Model (Elgavi-Hershler and Tanami, Educ. Sci. 16(11), 1838, 2026).
+
 **Evidence**: a position and an integer intensity (per-mille). In a document cell the position is a sentence that shows a void being pursued; in a thread cell it is a document on the timeline, with the document cell's summed intensity.
 
 **Peak**: where a motivation is strongest. Holds a supplied value and a computed field (highest total, strongest single item, centre, slope, bend).
